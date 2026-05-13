@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_key: str = os.getenv("SUPABASE_KEY", "")
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     fastapi_port: int = int(os.getenv("FASTAPI_PORT", 8000))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     cors_origins: list = [

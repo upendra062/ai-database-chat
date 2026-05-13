@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, List
 from langchain.agents import Tool, initialize_agent, AgentType
-from langchain.chat_models import ChatOpenAI
+from langchain_groq import ChatGroq
 from config import get_settings
 from agent.tools import DatabaseTools
 
@@ -9,10 +9,10 @@ from agent.tools import DatabaseTools
 class DatabaseAgent:
     def __init__(self):
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
+        self.llm = ChatGroq(
+            model_name="llama-3.3-70b-versatile",
             temperature=0,
-            api_key=self.settings.openai_api_key,
+            api_key=self.settings.groq_api_key,
         )
         self.tools = self._create_tools()
         self.agent = initialize_agent(
