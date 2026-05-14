@@ -199,7 +199,8 @@ def main():
     client = get_supabase_client()
 
     try:
-        create_tables(client)
+        # Tables must be created manually in Supabase SQL Editor before running this script
+        # create_tables(client)  # removed: client.sql() not available in supabase-py 2.x
         students = seed_students(client, 100)
         courses = seed_courses(client, 50)
         seed_transactions(client, students, courses, 850)

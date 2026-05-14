@@ -1,20 +1,11 @@
 import re
 import json
-import asyncio
 from typing import List
 from langchain.agents import Tool, initialize_agent, AgentType
-from langchain.callbacks.base import BaseCallbackHandler
 from langchain_groq import ChatGroq
 from config import get_settings
 from agent.tools import DatabaseTools
-
-
-class StreamingCallback(BaseCallbackHandler):
-    def __init__(self, queue: asyncio.Queue):
-        self.queue = queue
-
-    def on_llm_new_token(self, token: str, **kwargs):
-        asyncio.get_event_loop().call_soon_threadsafe(self.queue.put_nowait, token)
+from memory import MemoryStore
 
 
 class DatabaseAgent:
@@ -37,11 +28,11 @@ class DatabaseAgent:
             handle_parsing_errors=True,
             agent_kwargs={
                 "prefix": (
-                    "You are a helpful AI assistant for a university database system. "
+                    "You are Rocky AI, a helpful assistant for a university database system. "
                     "You can query students, courses, and transactions. "
-                    "For greetings or general questions NOT about the database, respond naturally and helpfully WITHOUT using any tools. "
+                    "For greetings or general questions NOT about the database, respond naturally WITHOUT using any tools. "
                     "Only use tools when the user explicitly asks about students, courses, transactions, or enrollment data. "
-                    "Always give a clean, friendly final answer."
+                    "Always give a clean, concise, friendly final answer."
                 )
             },
         )
@@ -61,7 +52,7 @@ class DatabaseAgent:
             Tool(
                 name="query_transactions",
                 func=lambda x: json.dumps(DatabaseTools.query_transactions()),
-                description="Query transactions/enrollments. Use when user asks about transactions or enrollments.",
+                description="Query transactions/enrollments. Use when user asks about transactions.",
             ),
             Tool(
                 name="get_student_courses",
@@ -75,18 +66,21 @@ class DatabaseAgent:
             ),
             Tool(
                 name="get_student_transaction_summary",
-                func=lambda student_id: json.dumps(DatabaseTools.get_student_transaction_summary(student_id)),
+                func=lambda student_id: json.dumps(
+                    DatabaseTools.get_student_transaction_summary(student_id)
+                ),
                 description="Get transaction summary for a student. Input: student_id.",
             ),
             Tool(
                 name="get_course_statistics",
-                func=lambda course_id: json.dumps(DatabaseTools.get_course_statistics(course_id)),
+                func=lambda course_id: json.dumps(
+                    DatabaseTools.get_course_statistics(course_id)
+                ),
                 description="Get enrollment statistics for a course. Input: course_id.",
             ),
         ]
 
     def _clean_response(self, response: str) -> str:
-        # Remove LangChain internal reasoning traces exposed to user
         patterns = [
             r'Question:.*?(?=\nFinal Answer:|\Z)',
             r'Thought:.*?(?=\nAction:|\nFinal Answer:|\Z)',
@@ -99,7 +93,6 @@ class DatabaseAgent:
         for pattern in patterns:
             cleaned = re.sub(pattern, '', cleaned, flags=re.DOTALL | re.IGNORECASE)
 
-        # Extract "Final Answer:" if present
         final_match = re.search(r'Final Answer:\s*(.*)', cleaned, re.DOTALL | re.IGNORECASE)
         if final_match:
             cleaned = final_match.group(1).strip()
@@ -107,9 +100,25 @@ class DatabaseAgent:
         cleaned = cleaned.strip()
         return cleaned if cleaned else response.strip()
 
-    def run(self, query: str) -> str:
+    def run(self, query: str, session_id: str = "default") -> str:
         try:
-            result = self.agent.run(query)
-            return self._clean_response(result)
+            # Load conversation history from Supabase
+            history = MemoryStore.load(session_id)
+            history_text = MemoryStore.format_for_prompt(history)
+
+            # Prepend history context to the query
+            if history_text:
+                full_query = f"{history_text}\n\nCurrent question: {query}"
+            else:
+                full_query = query
+
+            result = self.agent.run(full_query)
+            cleaned = self._clean_response(result)
+
+            # Persist this turn to Supabase
+            MemoryStore.save(session_id, "user", query)
+            MemoryStore.save(session_id, "assistant", cleaned)
+
+            return cleaned
         except Exception as e:
             return f"I encountered an error: {str(e)}"

@@ -36,8 +36,10 @@ class SupabaseDB:
 
 def init_db():
     try:
-        SupabaseDB.get_client()
-        print("✓ Supabase client initialized successfully")
+        client = SupabaseDB.get_client()
+        # Light connectivity check — fails fast if key is wrong
+        client.table("students").select("id").limit(1).execute()
+        print("✓ Supabase connected successfully")
     except Exception as e:
-        print(f"✗ Failed to initialize Supabase: {e}")
-        raise
+        # Allow startup to continue so /health still responds; DB queries will surface errors per-request
+        print(f"⚠ Supabase connection warning: {e}")

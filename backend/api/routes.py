@@ -56,7 +56,9 @@ async def chat(request: ChatRequest):
 
     try:
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, agent.run, sanitized_input)
+        response = await loop.run_in_executor(
+            None, lambda: agent.run(sanitized_input, request.session_id)
+        )
 
         output_data, filtered = output_layer.filter_output({"response": response}, tools_used=[])
         execution_time = (time.time() - start_time) * 1000
@@ -89,7 +91,9 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'start'})}\n\n"
 
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, agent.run, sanitized_input)
+            response = await loop.run_in_executor(
+                None, lambda: agent.run(sanitized_input, request.session_id)
+            )
 
             # Stream response word by word for natural feel
             words = response.split()
