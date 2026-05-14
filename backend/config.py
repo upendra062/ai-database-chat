@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # SQL injection patterns to block
     sql_injection_patterns: list = [
         r"(?i)(DROP|DELETE|UPDATE|INSERT|EXEC|EXECUTE|CREATE|ALTER)",
-        r"(?i)(--|;|/*|\*/|xp_|sp_)",
+        r"(?i)(--|;|/\*|\*/|xp_|sp_)",
         r"(?i)(UNION|HAVING|WHERE\s+1\s*=\s*1)",
     ]
 
