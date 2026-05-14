@@ -1,9 +1,20 @@
+import re
 import json
+import asyncio
 from typing import List
 from langchain.agents import Tool, initialize_agent, AgentType
+from langchain.callbacks.base import BaseCallbackHandler
 from langchain_groq import ChatGroq
 from config import get_settings
 from agent.tools import DatabaseTools
+
+
+class StreamingCallback(BaseCallbackHandler):
+    def __init__(self, queue: asyncio.Queue):
+        self.queue = queue
+
+    def on_llm_new_token(self, token: str, **kwargs):
+        asyncio.get_event_loop().call_soon_threadsafe(self.queue.put_nowait, token)
 
 
 class DatabaseAgent:
@@ -26,10 +37,11 @@ class DatabaseAgent:
             handle_parsing_errors=True,
             agent_kwargs={
                 "prefix": (
-                    "You are a helpful database assistant. You can query students, courses, "
-                    "and transactions. For greetings or general questions, respond naturally "
-                    "without using any tools. Only use tools when the user asks about "
-                    "database data."
+                    "You are a helpful AI assistant for a university database system. "
+                    "You can query students, courses, and transactions. "
+                    "For greetings or general questions NOT about the database, respond naturally and helpfully WITHOUT using any tools. "
+                    "Only use tools when the user explicitly asks about students, courses, transactions, or enrollment data. "
+                    "Always give a clean, friendly final answer."
                 )
             },
         )
@@ -73,9 +85,31 @@ class DatabaseAgent:
             ),
         ]
 
+    def _clean_response(self, response: str) -> str:
+        # Remove LangChain internal reasoning traces exposed to user
+        patterns = [
+            r'Question:.*?(?=\nFinal Answer:|\Z)',
+            r'Thought:.*?(?=\nAction:|\nFinal Answer:|\Z)',
+            r'Action:\s*None\s*',
+            r'Action Input:\s*None\s*',
+            r'Observation:.*?(?=\nThought:|\nFinal Answer:|\Z)',
+            r'> Finished chain\.',
+        ]
+        cleaned = response
+        for pattern in patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+
+        # Extract "Final Answer:" if present
+        final_match = re.search(r'Final Answer:\s*(.*)', cleaned, re.DOTALL | re.IGNORECASE)
+        if final_match:
+            cleaned = final_match.group(1).strip()
+
+        cleaned = cleaned.strip()
+        return cleaned if cleaned else response.strip()
+
     def run(self, query: str) -> str:
         try:
             result = self.agent.run(query)
-            return result
+            return self._clean_response(result)
         except Exception as e:
-            return f"Error processing query: {str(e)}"
+            return f"I encountered an error: {str(e)}"
